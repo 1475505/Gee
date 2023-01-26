@@ -16,6 +16,8 @@ type Context struct {
 	Path   string
 	Method string
 	Params map[string]string
+	// engine pointer, to access HTML template
+	engine *Engine
 	// response info
 	StatusCode int
 	// middleware
@@ -87,10 +89,12 @@ func (c *Context) Data(code int, data []byte) {
 	c.Writer.Write(data)
 }
 
-func (c *Context) HTML(code int, html string) {
+func (c *Context) HTML(code int, html string, data interface{}) {
 	c.SetHeader("Content-Type", "text/html")
 	c.Status(code)
-	c.Writer.Write([]byte(html))
+	if err := c.engine.htmlTemplates.ExecuteTemplate(c.Writer, html, data); err != nil {
+		c.Fail(500, err.Error())
+	}
 }
 
 func (c *Context) Fail(code int, err string) {
