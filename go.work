@@ -4,4 +4,5 @@ use (
 	.
 	gee
 	gee-orm
+	gee-rpc
 )

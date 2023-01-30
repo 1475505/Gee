@@ -1,33 +1,48 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"gee.com/gee/gee"
-	"net/http"
+	geerpc "gee.com/rpc"
+	"gee.com/rpc/codec"
+	"log"
+	"net"
 	"time"
 )
 
-type student struct {
-	Name string
-	Age  int8
-}
-
-func FormatAsDate(t time.Time) string {
-	year, month, day := t.Date()
-	return fmt.Sprintf("%d-%02d-%02d", year, month, day)
+func startServer(addr chan string) {
+	// pick a free port
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		log.Fatal("network error:", err)
+	}
+	log.Println("start rpc server on", l.Addr())
+	addr <- l.Addr().String()
+	geerpc.Accept(l)
 }
 
 func main() {
-	r := gee.Default()
-	r.GET("/", func(c *gee.Context) {
-		c.String(http.StatusOK, "Hello Geektutu\n")
-	})
-	// index out of range for testing Recovery()
-	r.GET("/panic", func(c *gee.Context) {
-		names := []string{"geektutu"}
-		c.String(http.StatusOK, names[100])
-	})
+	addr := make(chan string)
+	go startServer(addr)
 
-	r.Run(":9999")
+	// in fact, following code is like a simple geerpc client
+	conn, _ := net.Dial("tcp", <-addr)
+	defer func() { _ = conn.Close() }()
 
+	time.Sleep(time.Second)
+	// send options
+	_ = json.NewEncoder(conn).Encode(geerpc.DefaultOption)
+	cc := codec.NewGobCodec(conn)
+	// send request & receive response
+	for i := 0; i < 5; i++ {
+		h := &codec.Header{
+			ServiceMethod: "Foo.Sum",
+			Seq:           uint64(i),
+		}
+		_ = cc.Write(h, fmt.Sprintf("geerpc req %d", h.Seq))
+		_ = cc.ReadHeader(h)
+		var reply string
+		_ = cc.ReadBody(&reply)
+		log.Println("reply:", reply)
+	}
 }
